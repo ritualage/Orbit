@@ -8,6 +8,7 @@
 // ContentView.swift
 import SwiftUI
 import MarkdownUI
+import PDFKit
 
 /*
  1) Keep promptPreview generation internally (so the button can run), but don’t render it. If you prefer, compute on-demand in run().
@@ -19,6 +20,19 @@ import MarkdownUI
  4) Increase the minHeight of the results Card.
  */
 
+/*
+ Layout reminder
+ Your outer HStack should contain:
+ Left sidebar (existing)
+ Main pane (existing, with Save button added)
+ Right sidebar (new block above)
+ 
+ 
+ Notes
+ PDFs are stored in ~/Documents/Orbit; DB is in Application Support/Orbit/orbit.sqlite3.
+ You can later add delete/rename by adding a context menu on each saved item and removing the file + row, then refreshing savedDocs.
+ If you want fully styled PDFs that match the on-screen Markdown, switch to rendering HTML via WKWebView and print that to PDF; I kept this edition simple and reliable.
+ */
 
 
 /*
@@ -35,6 +49,8 @@ struct ContentView: View {
     
     @State private var selected: ADHDTask = .dopamineMenu
     @State private var fieldValues: [String: String] = [:]
+    @State private var savedDocs: [SavedDoc] = []
+    
     @StateObject private var client = OllamaClient()
     
     var body: some View {
@@ -122,31 +138,122 @@ struct ContentView: View {
                 // Results card (taller)
                 Card {
                     VStack(alignment: .leading, spacing: 8) {
-                        Text("Response")
-                            .font(.headline)
+                        HStack {
+                            Text("Response").font(.headline)
+                            Spacer()
+                            Button {
+                                saveCurrentResult()
+                            } label: {
+                                HStack(spacing: 6) {
+                                    Image(systemName: "square.and.arrow.down")
+                                    Text("Save")
+                                }
+                            }
+                            .disabled(client.response.isEmpty || client.isRunning)
+                        }
+                        
+                        
                         ScrollView {
                             Markdown(client.response.isEmpty ? "Results will appear here." : client.response)
-                                .markdownTheme(.gitHub) // nice default theme
-                                .markdownTextStyle {
-                                    FontSize(14)
-                                }
+                                .markdownTheme(.gitHub)
+                                .markdownTextStyle { FontSize(14) }
                                 .frame(maxWidth: .infinity, alignment: .topLeading)
-                                .padding(.trailing, 2) // avoids clipped right edge when scrolling
+                                .padding(.trailing, 2)
                         }
                         if let err = client.errorMessage {
                             Text(err).foregroundColor(.red).font(.footnote)
                         }
                     }
-                    .frame(minHeight: 440) // roughly twice the earlier 220
+                    .frame(minHeight: 440)
                 }
+                
+                
+//                Card {
+//                    VStack(alignment: .leading, spacing: 8) {
+//                        Text("Response")
+//                            .font(.headline)
+//                        ScrollView {
+//                            Markdown(client.response.isEmpty ? "Results will appear here." : client.response)
+//                                .markdownTheme(.gitHub) // nice default theme
+//                                .markdownTextStyle {
+//                                    FontSize(14)
+//                                }
+//                                .frame(maxWidth: .infinity, alignment: .topLeading)
+//                                .padding(.trailing, 2) // avoids clipped right edge when scrolling
+//                        }
+//                        if let err = client.errorMessage {
+//                            Text(err).foregroundColor(.red).font(.footnote)
+//                        }
+//                    }
+//                    .frame(minHeight: 440) // roughly twice the earlier 220
+//                }
                 
                 Spacer()
             }
+            
+            // Right sidebar
+            VStack(alignment: .leading, spacing: 8) {
+                HStack {
+                    Text("Saved").font(.system(size: 16, weight: .semibold))
+                    Spacer()
+                    Button {
+                        let dir = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first!
+                        let folder = dir.appendingPathComponent("Orbit", isDirectory: true)
+                        NSWorkspace.shared.open(folder)
+                    } label: { Image(systemName: "folder") }
+                        .buttonStyle(.plain)
+                        .help("Open PDFs folder")
+                }
+                ScrollView {
+                    LazyVStack(alignment: .leading, spacing: 10) {
+                        ForEach(savedDocs) { doc in
+                            Button {
+                                NSWorkspace.shared.open(URL(fileURLWithPath: doc.pdfPath))
+                            } label: {
+                                HStack(spacing: 10) {
+                                    ZStack {
+                                        RoundedRectangle(cornerRadius: 8)
+                                            .fill(Color.white)
+                                            .frame(width: 44, height: 56)
+                                            .overlay(
+                                                Text(doc.emoji).font(.system(size: 20))
+                                            )
+                                            .shadow(color: Color.black.opacity(0.05), radius: 2, x: 0, y: 1)
+                                    }
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text(doc.title)
+                                            .lineLimit(2)
+                                            .font(.system(size: 12))
+                                            .foregroundColor(.primary)
+                                        Text(doc.date, style: .date)
+                                            .font(.system(size: 10))
+                                            .foregroundColor(.secondary)
+                                    }
+                                    Spacer()
+                                    Image(systemName: "doc.text")
+                                        .foregroundColor(.secondary)
+                                }
+                                .padding(6)
+                                .background(Color.white.opacity(0.6))
+                                .cornerRadius(8)
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                }
+                Spacer()
+            }
+            .padding(12)
+            .frame(width: 260)
+            .background(Color.white)
+            .overlay(Divider().frame(maxHeight: .infinity), alignment: .leading)
             //            .padding(20)
-            .background(
-                LinearGradient(colors: [.white, .accentCyan.opacity(0.15)], startPoint: .top, endPoint: .bottom)
-            )
-        }
+//            .background(
+//                LinearGradient(colors: [.white, .accentCyan.opacity(0.15)], startPoint: .top, endPoint: .bottom)
+//            )
+        }.onAppear { savedDocs = DB.shared.fetchAll() }
+        
+        
     }
     
     private func run() {
@@ -154,6 +261,48 @@ struct ContentView: View {
         print(prompt)
         client.run(prompt: prompt)
     }
+    
+    private func saveCurrentResult() {
+        guard !client.response.isEmpty else { return }
+        
+        
+        // Build inputs list for the PDF
+        let inputs: [(String, String)] = selected.fields.map { field in
+            (field.label, fieldValues[field.key, default: ""])
+        }
+        
+        // Title and filename: emoji + task + first non-empty inputs
+        let nonEmpty = inputs.map { $0.1 }.filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+        let suffix = nonEmpty.prefix(2).joined(separator: " · ")
+        let docTitle = selected.displayTitle
+        let fileBase = "\(selected.emoji)_\(docTitle)\(suffix.isEmpty ? "" : "_\(suffix)")"
+        
+        do {
+            let url = try PDFGenerator.savePDFFromMarkdownUI(
+                emoji: selected.emoji,
+                title: selected.displayTitle,
+                inputs: inputs,
+                markdown: client.response,
+                suggestedName: fileBase
+            )
+            
+//            let url = try PDFGenerator.savePDF(
+//                emoji: selected.emoji,
+//                title: docTitle,
+//                inputs: inputs,
+//                markdown: client.response,
+//                suggestedName: fileBase
+//            )
+            _ = DB.shared.insert(taskID: selected.idString,
+                                 emoji: selected.emoji,
+                                 title: suffix.isEmpty ? docTitle : "\(docTitle) — \(suffix)",
+                                 pdfPath: url.path)
+            savedDocs = DB.shared.fetchAll()
+        } catch {
+            print("PDF save failed: \(error)")
+        }
+    }
+    
 }
 
 class Debouncer {

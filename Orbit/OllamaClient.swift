@@ -95,7 +95,7 @@ extension OllamaClient: URLSessionDataDelegate {
                 }
             } else {
                 // If decoding fails, you can log the line for debugging
-                // print("Bad line: $$String(data: lineData, encoding: .utf8) ?? "")")
+                // print("Bad line: \(String(data: lineData, encoding: .utf8) ?? "")")
             }
         }
     }

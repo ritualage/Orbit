@@ -14,7 +14,7 @@ enum ADHDTask: String, CaseIterable, Identifiable {
     case taskParalysis = "💥 Task paralysis breaker"
     case hyperfocusHijacker = "🧲 Hyperfocus hijacker"
     case timeBlindness = "⏰ Time blindness fixer"
-    case executiveDysfunction = "🧠 Executive dysfunction ⚙️"
+    case executiveDysfunction = "⚙️ Executive dysfunction "
     case memoryProsthetic = "🗂️ Memory prosthetic system"
     case rsdShield = "🛡️ RSD shield builder"
 
@@ -108,3 +108,21 @@ enum ADHDTask: String, CaseIterable, Identifiable {
         }
     }
 }
+
+extension ADHDTask {
+    var idString: String { String(describing: self) }
+    
+    
+    var emoji: String {
+        // rawValue starts with "🍭 Dopamine..." — take the first grapheme
+        String(rawValue.split(separator: " ").first ?? "")
+    }
+    
+    var displayTitle: String {
+        // remove the leading emoji and space
+        var parts = rawValue.split(separator: " ")
+        _ = parts.first // emoji
+        return parts.dropFirst().joined(separator: " ")
+    }
+}
+
