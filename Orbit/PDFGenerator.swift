@@ -11,78 +11,84 @@ import Foundation
 import PDFKit
 
 enum PDFGenerator {
-static func savePDFFromMarkdownUI(emoji: String,
-title: String,
-inputs: [(String, String)],
-markdown: String,
-suggestedName: String) throws -> URL {
-let dir = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first!
-let folder = dir.appendingPathComponent("Orbit", isDirectory: true)
-try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
-let safe = suggestedName.replacingOccurrences(of: "[^a-zA-Z0-9_-]+", with: "_", options: .regularExpression)
-let url = folder.appendingPathComponent("\(safe).pdf")
-
-
-    // Build the SwiftUI view offscreen
-    let pageWidth: CGFloat = 612
-    let pageHeight: CGFloat = 792
-
-    let view = PrintableMarkdownView(emoji: emoji, title: title, inputs: inputs, markdown: markdown)
-    let hosting = NSHostingView(rootView: view)
-    hosting.frame = NSRect(x: 0, y: 0, width: pageWidth, height: 2000) // provisional
-    let ideal = hosting.fittingSize
-    let totalHeight = max(ideal.height, pageHeight)
-    hosting.frame.size.height = totalHeight
-
-    let tallData = hosting.dataWithPDF(inside: NSRect(x: 0, y: 0, width: pageWidth, height: totalHeight))
-
-    if let paginated = paginateTallPDF(tallData, pageSize: CGSize(width: pageWidth, height: pageHeight)) {
-        try paginated.write(to: url, options: Data.WritingOptions.atomic)
-    } else {
-        try tallData.write(to: url, options: Data.WritingOptions.atomic)
+    static func savePDFFromMarkdownUI(emoji: String,
+                                      title: String,
+                                      inputs: [(String, String)],
+                                      markdown: String,
+                                      suggestedName: String) throws -> URL {
+        let dir = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first!
+        let folder = dir.appendingPathComponent("Orbit", isDirectory: true)
+        try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        let safe = suggestedName.replacingOccurrences(of: "[^a-zA-Z0-9_-]+", with: "_", options: .regularExpression)
+        let url = folder.appendingPathComponent("$$safe).pdf")
+        
+        
+        // Page width remains e.g. 612 pts; height will be the content’s ideal height
+        //let pageWidth: CGFloat = 612
+        let pageWidth: CGFloat = 792 // Letter landscape width (11" * 72)
+        
+        let view = PrintableMarkdownView(emoji: emoji, title: title, inputs: inputs, markdown: markdown, pageWidth: pageWidth)
+        let hosting = NSHostingView(rootView: view)
+        
+        // First set a provisional width, tiny height
+        hosting.frame = NSRect(x: 0, y: 0, width: pageWidth, height: 10)
+        
+        // Ask SwiftUI for the ideal height at that width
+        let idealSize = hosting.fittingSize
+        let totalHeight = max(idealSize.height, 10)
+        
+        // Resize to exact content height
+        hosting.frame.size.height = totalHeight
+        
+        // Capture one tall page
+        let tallData = hosting.dataWithPDF(inside: NSRect(x: 0, y: 0, width: pageWidth, height: totalHeight))
+        
+        try tallData.write(to: url, options: [.atomic])
+        return url
     }
-    return url
-}
-
-// Make this static
-static func paginateTallPDF(_ data: Data, pageSize: CGSize) -> Data? {
-    guard let srcDoc = PDFDocument(data: data),
-          let firstPage = srcDoc.page(at: 0),
-          let cgPage = firstPage.pageRef else { return nil }
-
-    let srcBounds = firstPage.bounds(for: .mediaBox)
-    let totalHeight = srcBounds.height
-    let outDoc = PDFDocument()
-
-    var yOffset: CGFloat = 0
-    var outIndex = 0
-
-    while yOffset < totalHeight {
-        let pdfData = NSMutableData()
-        var mediaBox = CGRect(origin: .zero, size: pageSize)
-
-        guard let consumer = CGDataConsumer(data: pdfData as CFMutableData),
-              let ctx = CGContext(consumer: consumer, mediaBox: &mediaBox, nil) else { break }
-
-        ctx.beginPDFPage(nil)
-        ctx.saveGState()
-        ctx.translateBy(x: 0, y: -yOffset)
-        ctx.drawPDFPage(cgPage)
-        ctx.restoreGState()
-        ctx.endPDFPage()
-        ctx.closePDF()
-
-        if let piece = PDFDocument(data: pdfData as Data),
-           let piecePage = piece.page(at: 0) {
-            outDoc.insert(piecePage, at: outIndex)
-            outIndex += 1
+    
+    // Top-down pagination so page 1 starts with the beginning of your content
+    static func paginateTopDown(_ data: Data, pageSize: CGSize) -> Data? {
+        guard let srcDoc = PDFDocument(data: data),
+              let firstPage = srcDoc.page(at: 0),
+              let cgPage = firstPage.pageRef else { return nil }
+        
+        let srcBounds = firstPage.bounds(for: .mediaBox)
+        let totalHeight = srcBounds.height
+        
+        let outDoc = PDFDocument()
+        var pageIndex = 0
+        var yOffset: CGFloat = 0
+        
+        while yOffset < totalHeight {
+            let pdfData = NSMutableData()
+            var mediaBox = CGRect(origin: .zero, size: pageSize)
+            guard let consumer = CGDataConsumer(data: pdfData as CFMutableData),
+                  let ctx = CGContext(consumer: consumer, mediaBox: &mediaBox, nil) else { break }
+            
+            ctx.beginPDFPage(nil)
+            ctx.saveGState()
+            
+            // Translate so that we cut from the TOP
+            // PDF origin is bottom-left; the top slice begins at (totalHeight - pageHeight)
+            let sliceOriginY = max(totalHeight - pageSize.height - yOffset, 0)
+            ctx.translateBy(x: 0, y: -sliceOriginY)
+            
+            ctx.drawPDFPage(cgPage)
+            ctx.restoreGState()
+            ctx.endPDFPage()
+            ctx.closePDF()
+            
+            if let piece = PDFDocument(data: pdfData as Data),
+               let piecePage = piece.page(at: 0) {
+                outDoc.insert(piecePage, at: pageIndex)
+                pageIndex += 1
+            }
+            yOffset += pageSize.height
         }
-
-        yOffset += pageSize.height
+        
+        return outDoc.dataRepresentation()
     }
-
-    return outDoc.dataRepresentation()
-}
 }
 
 struct PDFContentView: View {
@@ -116,6 +122,6 @@ struct PDFContentView: View {
                 .frame(maxWidth: .infinity, alignment: .topLeading)
         }
         .padding(24)
-        .frame(width: 612) // Letter width at 72dpi
+        .frame(width: 792) // Letter width at 72dpi
     }
 }
