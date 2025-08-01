@@ -7,13 +7,36 @@
 
 // ContentView.swift
 import SwiftUI
+import MarkdownUI
+
+/*
+ 1) Keep promptPreview generation internally (so the button can run), but don’t render it. If you prefer, compute on-demand in run().
+ 
+ 2) Update the top Card to include the button.
+ 
+ 3) Remove the middle Card.
+ 
+ 4) Increase the minHeight of the results Card.
+ */
+
+
+
+/*
+ Optional: compute the prompt on-demand
+ - Remove promptPreview state and updatePreview().
+ 
+ 
+ With these changes, users only see the inputs and a prominent Run button at the top, and the results area is doubled in height.
+ */
+
+
 
 struct ContentView: View {
+    
     @State private var selected: ADHDTask = .dopamineMenu
     @State private var fieldValues: [String: String] = [:]
-    @State private var promptPreview: String = ""
     @StateObject private var client = OllamaClient()
-
+    
     var body: some View {
         HStack(spacing: 16) {
             // Sidebar
@@ -26,7 +49,6 @@ struct ContentView: View {
                             Button {
                                 selected = task
                                 fieldValues = [:]
-                                updatePreview()
                             } label: {
                                 HStack {
                                     Text(task.rawValue)
@@ -48,12 +70,13 @@ struct ContentView: View {
             .frame(width: 260)
             .background(Color.white)
             .overlay(Divider().frame(maxHeight: .infinity), alignment: .trailing)
-
+            
             // Main pane
             VStack(alignment: .leading, spacing: 16) {
                 Text(selected.rawValue)
                     .font(.system(size: 20, weight: .bold))
-
+                
+                // Top card: inputs + Run button
                 Card {
                     VStack(alignment: .leading, spacing: 12) {
                         ForEach(selected.fields) { field in
@@ -61,34 +84,17 @@ struct ContentView: View {
                                 title: field.label,
                                 text: Binding(
                                     get: { fieldValues[field.key, default: ""] },
-                                    set: { fieldValues[field.key] = $0; updatePreview() }
+                                    set: { newValue in
+                                        fieldValues[field.key] = newValue
+                                        // optional: debounce internal prompt update
+                                        // debouncer.schedule(after: 0.2) { updatePreview() }
+                                    }
                                 ),
                                 multiline: field.isMultiline,
                                 placeholder: field.placeholder
                             )
                         }
-                    }
-                }
-
-                Card {
-                    VStack(alignment: .leading, spacing: 8) {
-                        HStack {
-                            Text("Prompt preview")
-                                .font(.headline)
-                            Spacer()
-                            Button {
-                                NSPasteboard.general.clearContents()
-                                NSPasteboard.general.setString(promptPreview, forType: .string)
-                            } label: {
-                                Text("Copy")
-                            }
-                        }
-                        ScrollView {
-                            Text(promptPreview.isEmpty ? "Fill in the fields to see the prompt..." : promptPreview)
-                                .font(.system(size: 13))
-                                .foregroundColor(.secondary)
-                                .frame(maxWidth: .infinity, alignment: .topLeading)
-                        }
+                        
                         HStack {
                             Button {
                                 run()
@@ -102,45 +108,51 @@ struct ContentView: View {
                                 .foregroundColor(.black)
                                 .cornerRadius(10)
                             }
-                            .disabled(client.isRunning || promptPreview.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                            .disabled(client.isRunning)
+                            
                             Spacer()
-                            Text("Model: $$client.modelName)").foregroundColor(.secondary).font(.footnote)
+                            Text("Model \(client.modelName)")
+                                .foregroundColor(.secondary)
+                                .font(.footnote)
                         }
+                        .padding(.top, 4)
                     }
                 }
-
+                
+                // Results card (taller)
                 Card {
                     VStack(alignment: .leading, spacing: 8) {
                         Text("Response")
                             .font(.headline)
                         ScrollView {
-                            Text(client.response.isEmpty ? "Results will appear here." : client.response)
-                                .font(.system(size: 14))
+                            Markdown(client.response.isEmpty ? "Results will appear here." : client.response)
+                                .markdownTheme(.gitHub) // nice default theme
+                                .markdownTextStyle {
+                                    FontSize(14)
+                                }
                                 .frame(maxWidth: .infinity, alignment: .topLeading)
+                                .padding(.trailing, 2) // avoids clipped right edge when scrolling
                         }
                         if let err = client.errorMessage {
                             Text(err).foregroundColor(.red).font(.footnote)
                         }
                     }
-                    .frame(minHeight: 220)
+                    .frame(minHeight: 440) // roughly twice the earlier 220
                 }
-
+                
                 Spacer()
             }
-            .padding(20)
+            //            .padding(20)
+            .background(
+                LinearGradient(colors: [.white, .accentCyan.opacity(0.15)], startPoint: .top, endPoint: .bottom)
+            )
         }
-        .background(
-            LinearGradient(colors: [.white, .accentCyan.opacity(0.15)], startPoint: .top, endPoint: .bottom)
-        )
-        .onAppear { updatePreview() }
     }
-
-    private func updatePreview() {
-        promptPreview = selected.prompt(with: fieldValues)
-    }
-
+    
     private func run() {
-        client.run(prompt: promptPreview)
+        let prompt = selected.prompt(with: fieldValues)
+        print(prompt)
+        client.run(prompt: prompt)
     }
 }
 

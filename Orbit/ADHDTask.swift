@@ -70,40 +70,40 @@ enum ADHDTask: String, CaseIterable, Identifiable {
         case .dopamineMenu:
             let tasks = values["tasks", default: ""]
             return """
-            I have $$tasks). Create a "dopamine sandwich" schedule where boring tasks are wrapped in rewarding ones. Include specific rewards and short breaks. Present as a time-blocked list.
+            I have \(tasks). Create a "dopamine sandwich" schedule where boring tasks are wrapped in rewarding ones. Include specific rewards and short breaks. Present as a time-blocked list.
             """
         case .taskParalysis:
             let task = values["task", default: ""]
             let time = values["time", default: ""]
             return """
-            Been staring at $$task) for $$time). Break it into steps so tiny my ADHD brain can't argue. The first step must take under 2 minutes. Include momentum hacks and optional body-doubling ideas.
+            Been staring at \(task) for \(time). Break it into steps so tiny my ADHD brain can't argue. The first step must take under 2 minutes. Include momentum hacks and optional body-doubling ideas.
             """
         case .hyperfocusHijacker:
             let wrong = values["wrongThing", default: ""]
             let important = values["importantThing", default: ""]
             return """
-            Currently hyperfocusing on $$wrong) but need to do $$important). Design a bridge activity that redirects this energy without losing momentum. Give 3 graded bridge options and a 30–60 minute execution plan.
+            Currently hyperfocusing on \(wrong) but need to do \(important). Design a bridge activity that redirects this energy without losing momentum. Give 3 graded bridge options and a 30–60 minute execution plan.
             """
         case .timeBlindness:
             let list = values["taskList", default: ""]
             return """
-            I think $$list) will take "a few hours." Calculate realistic time including ADHD tax, transitions, and distractions. Then create a visual schedule with buffers and alarms. Mention break timing and contingency.
+            I think \(list) will take "a few hours." Calculate realistic time including ADHD tax, transitions, and distractions. Then create a visual schedule with buffers and alarms. Mention break timing and contingency.
             """
         case .executiveDysfunction:
             let task = values["task", default: ""]
             return """
-            I know I should $$task) but physically can't start. Create a "background process" method to trick my brain into starting without deciding to. Include micro-steps, environmental tweaks, and a 10-minute warm start.
+            I know I should \(task) but physically can't start. Create a "background process" method to trick my brain into starting without deciding to. Include micro-steps, environmental tweaks, and a 10-minute warm start.
             """
         case .memoryProsthetic:
             let things = values["importantThings", default: ""]
             return """
-            I keep forgetting $$things). Design an external memory system that doesn't rely on me remembering to check it. Use push-based cues, placement, automation, and redundancy. Include setup checklist and defaults for iPhone/Mac.
+            I keep forgetting \(things). Design an external memory system that doesn't rely on me remembering to check it. Use push-based cues, placement, automation, and redundancy. Include setup checklist and defaults for iPhone/Mac.
             """
         case .rsdShield:
             let task = values["task", default: ""]
             let fears = values["fears", default: ""]
             return """
-            I'm avoiding $$task) because I'm scared of $$fears). Write a self-talk script and protective protocol that reduces rejection sensitivity while doing it. Include pre-brief, during-task prompts, and aftercare.
+            I'm avoiding \(task) because I'm scared of \(fears). Write a self-talk script and protective protocol that reduces rejection sensitivity while doing it. Include pre-brief, during-task prompts, and aftercare.
             """
         }
     }
