@@ -12,6 +12,11 @@ struct OrbitApp: App {
     var body: some Scene {
         WindowGroup {
             ContentView()
+                .environment(\.colorScheme, .light)
         }
+#if os(macOS)
+        .windowStyle(.hiddenTitleBar)
+        .windowToolbarStyle(.unifiedCompact)
+#endif
     }
 }
