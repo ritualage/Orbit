@@ -67,6 +67,10 @@ final class DB {
         return true
     }
     
+    func delete(id: Int64) {
+        _ = exec("DELETE FROM saved_docs WHERE id = \(id);")
+    }
+    
     func insert(taskID: String, emoji: String, title: String, pdfPath: String) -> Int64? {
         let sql = "INSERT INTO saved_docs (created_at, task_id, emoji, title, pdf_path) VALUES (?,?,?,?,?);"
         var stmt: OpaquePointer?

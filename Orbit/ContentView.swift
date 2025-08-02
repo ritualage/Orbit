@@ -9,6 +9,8 @@
 import SwiftUI
 import MarkdownUI
 import PDFKit
+import AppKit
+import QuickLookUI
 
 /*
  1) Keep promptPreview generation internally (so the button can run), but don’t render it. If you prefer, compute on-demand in run().
@@ -43,7 +45,14 @@ import PDFKit
  With these changes, users only see the inputs and a prominent Run button at the top, and the results area is doubled in height.
  */
 
-
+final class SinglePreviewDataSource: NSObject, QLPreviewPanelDataSource {
+    private let url: URL
+    init(url: URL) { self.url = url }
+    func numberOfPreviewItems(in panel: QLPreviewPanel!) -> Int { 1 }
+    func previewPanel(_ panel: QLPreviewPanel!, previewItemAt index: Int) -> QLPreviewItem {
+        url as QLPreviewItem
+    }
+}
 
 struct ContentView: View {
     
@@ -168,25 +177,25 @@ struct ContentView: View {
                 }
                 
                 
-//                Card {
-//                    VStack(alignment: .leading, spacing: 8) {
-//                        Text("Response")
-//                            .font(.headline)
-//                        ScrollView {
-//                            Markdown(client.response.isEmpty ? "Results will appear here." : client.response)
-//                                .markdownTheme(.gitHub) // nice default theme
-//                                .markdownTextStyle {
-//                                    FontSize(14)
-//                                }
-//                                .frame(maxWidth: .infinity, alignment: .topLeading)
-//                                .padding(.trailing, 2) // avoids clipped right edge when scrolling
-//                        }
-//                        if let err = client.errorMessage {
-//                            Text(err).foregroundColor(.red).font(.footnote)
-//                        }
-//                    }
-//                    .frame(minHeight: 440) // roughly twice the earlier 220
-//                }
+                //                Card {
+                //                    VStack(alignment: .leading, spacing: 8) {
+                //                        Text("Response")
+                //                            .font(.headline)
+                //                        ScrollView {
+                //                            Markdown(client.response.isEmpty ? "Results will appear here." : client.response)
+                //                                .markdownTheme(.gitHub) // nice default theme
+                //                                .markdownTextStyle {
+                //                                    FontSize(14)
+                //                                }
+                //                                .frame(maxWidth: .infinity, alignment: .topLeading)
+                //                                .padding(.trailing, 2) // avoids clipped right edge when scrolling
+                //                        }
+                //                        if let err = client.errorMessage {
+                //                            Text(err).foregroundColor(.red).font(.footnote)
+                //                        }
+                //                    }
+                //                    .frame(minHeight: 440) // roughly twice the earlier 220
+                //                }
                 
                 Spacer()
             }
@@ -207,17 +216,17 @@ struct ContentView: View {
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 10) {
                         ForEach(savedDocs) { doc in
+                            let fileURL = URL(fileURLWithPath: doc.pdfPath)
+                            
                             Button {
-                                NSWorkspace.shared.open(URL(fileURLWithPath: doc.pdfPath))
+                                NSWorkspace.shared.open(fileURL)
                             } label: {
                                 HStack(spacing: 10) {
                                     ZStack {
                                         RoundedRectangle(cornerRadius: 8)
                                             .fill(Color.white)
                                             .frame(width: 44, height: 56)
-                                            .overlay(
-                                                Text(doc.emoji).font(.system(size: 20))
-                                            )
+                                            .overlay(Text(doc.emoji).font(.system(size: 20)))
                                             .shadow(color: Color.black.opacity(0.05), radius: 2, x: 0, y: 1)
                                     }
                                     VStack(alignment: .leading, spacing: 2) {
@@ -238,6 +247,26 @@ struct ContentView: View {
                                 .cornerRadius(8)
                             }
                             .buttonStyle(.plain)
+                            .contextMenu {
+                                Button("Open") {
+                                    NSWorkspace.shared.open(fileURL)
+                                }
+                                Button("Reveal in Finder") {
+                                    NSWorkspace.shared.activateFileViewerSelecting([fileURL])
+                                }
+                                Button("Share…") {
+                                    // AirDrop will appear here automatically
+                                    shareFile(fileURL)
+                                }
+                                Button("Quick Look") { quickLook(url: fileURL) }
+                                Divider()
+                                Button(role: .destructive) {
+                                    deletePDF(at: fileURL, dbID: doc.id)
+                                } label: {
+                                    Label("Delete", systemImage: "trash")
+                                }
+                            }
+                            
                         }
                     }
                 }
@@ -248,9 +277,9 @@ struct ContentView: View {
             .background(Color.white)
             .overlay(Divider().frame(maxHeight: .infinity), alignment: .leading)
             //            .padding(20)
-//            .background(
-//                LinearGradient(colors: [.white, .accentCyan.opacity(0.15)], startPoint: .top, endPoint: .bottom)
-//            )
+            //            .background(
+            //                LinearGradient(colors: [.white, .accentCyan.opacity(0.15)], startPoint: .top, endPoint: .bottom)
+            //            )
         }.onAppear { savedDocs = DB.shared.fetchAll() }
         
         
@@ -261,7 +290,7 @@ struct ContentView: View {
         print(prompt)
         client.run(prompt: prompt)
     }
-    
+        
     private func saveCurrentResult() {
         guard !client.response.isEmpty else { return }
         
@@ -286,13 +315,13 @@ struct ContentView: View {
                 suggestedName: fileBase
             )
             
-//            let url = try PDFGenerator.savePDF(
-//                emoji: selected.emoji,
-//                title: docTitle,
-//                inputs: inputs,
-//                markdown: client.response,
-//                suggestedName: fileBase
-//            )
+            //            let url = try PDFGenerator.savePDF(
+            //                emoji: selected.emoji,
+            //                title: docTitle,
+            //                inputs: inputs,
+            //                markdown: client.response,
+            //                suggestedName: fileBase
+            //            )
             _ = DB.shared.insert(taskID: selected.idString,
                                  emoji: selected.emoji,
                                  title: suffix.isEmpty ? docTitle : "\(docTitle) — \(suffix)",
@@ -303,6 +332,43 @@ struct ContentView: View {
         }
     }
     
+    
+    private func deletePDF(at url: URL, dbID: Int64) {
+        do {
+            try FileManager.default.removeItem(at: url)
+            // Remove DB row
+            DB.shared.delete(id: dbID)
+            
+            // Reload list
+            savedDocs = DB.shared.fetchAll()
+        } catch {
+            let alert = NSAlert(error: error)
+            alert.runModal()
+        }
+    }
+    
+    
+    private func quickLook(url: URL) {
+        guard let panel = QLPreviewPanel.shared() else { return }
+        panel.dataSource = SinglePreviewDataSource(url: url)
+        if panel.isVisible {
+            panel.reloadData()
+        } else {
+            panel.makeKeyAndOrderFront(nil)
+        }
+    }
+    
+}
+
+
+extension View {
+    // Presents the macOS share picker (includes AirDrop)
+    func shareFile(_ url: URL) {
+        let picker = NSSharingServicePicker(items: [url])
+        if let window = NSApp.keyWindow, let view = window.contentView {
+            picker.show(relativeTo: .zero, of: view, preferredEdge: .minY)
+        }
+    }
 }
 
 class Debouncer {

@@ -20,7 +20,7 @@ enum PDFGenerator {
         let folder = dir.appendingPathComponent("Orbit", isDirectory: true)
         try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         let safe = suggestedName.replacingOccurrences(of: "[^a-zA-Z0-9_-]+", with: "_", options: .regularExpression)
-        let url = folder.appendingPathComponent("$$safe).pdf")
+        let url = folder.appendingPathComponent("\(safe).pdf")
         
         
         // Page width remains e.g. 612 pts; height will be the content’s ideal height
