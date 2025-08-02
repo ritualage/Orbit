@@ -18,5 +18,19 @@ struct OrbitApp: App {
         .windowStyle(.hiddenTitleBar)
         .windowToolbarStyle(.unifiedCompact)
 #endif
+        .commands {
+            CommandGroup(after: .textEditing) {
+                Button("Run with Ollama") {
+                    // Access a singleton, environment object, or post a notification to trigger run()
+                    NotificationCenter.default.post(name: .runWithOllamaShortcut, object: nil)
+                }
+                .keyboardShortcut(.return, modifiers: [.command])
+            }
+        }
     }
 }
+
+extension Notification.Name {
+    static let runWithOllamaShortcut = Notification.Name("runWithOllamaShortcut")
+}
+

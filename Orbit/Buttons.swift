@@ -69,7 +69,7 @@ struct SaveButton: View {
         .foregroundColor(.black)
         .background(
             RoundedRectangle(cornerRadius: cornerRadius)
-                .fill(isEnabled ? Color.green : Color.green.opacity(0.25))
+                .fill(isEnabled ? Color.activeGreen : Color.inactiveGreen.opacity(0.5))
         )
         .overlay(
             RoundedRectangle(cornerRadius: cornerRadius)

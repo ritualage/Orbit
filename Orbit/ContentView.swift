@@ -45,6 +45,7 @@ import QuickLookUI
  With these changes, users only see the inputs and a prominent Run button at the top, and the results area is doubled in height.
  */
 
+
 final class SinglePreviewDataSource: NSObject, QLPreviewPanelDataSource {
     private let url: URL
     init(url: URL) { self.url = url }
@@ -54,13 +55,16 @@ final class SinglePreviewDataSource: NSObject, QLPreviewPanelDataSource {
     }
 }
 
+
 struct ContentView: View {
     
     @State private var selected: ADHDTask = .dopamineMenu
     @State private var fieldValues: [String: String] = [:]
     @State private var savedDocs: [SavedDoc] = []
-    
+    @State private var quickLookDataSource: SinglePreviewDataSource?
+
     @StateObject private var client = OllamaClient()
+    @FocusState private var focusedFieldKey: String?
     
     var body: some View {
         HStack(spacing: 16) {
@@ -118,22 +122,28 @@ struct ContentView: View {
                                 multiline: field.isMultiline,
                                 placeholder: field.placeholder
                             )
+                            
+
                         }
                         
                         HStack {
-                            Button {
-                                run()
-                            } label: {
-                                HStack {
-                                    if client.isRunning { ProgressView().scaleEffect(0.7) }
-                                    Text(client.isRunning ? "Running..." : "Run with Ollama")
-                                }
-                                .padding(.vertical, 8).padding(.horizontal, 12)
-                                .background(Color.accentCyan)
-                                .foregroundColor(.black)
-                                .cornerRadius(10)
+                            RunButton(isRunning: client.isRunning) {
+                                if !client.isRunning { run() }
                             }
                             .disabled(client.isRunning)
+//                            Button {
+//                                run()
+//                            } label: {
+//                                HStack {
+//                                    if client.isRunning { ProgressView().scaleEffect(0.7) }
+//                                    Text(client.isRunning ? "Running..." : "Run with Ollama")
+//                                }
+//                                .padding(.vertical, 8).padding(.horizontal, 12)
+//                                .background(Color.accentCyan)
+//                                .foregroundColor(.black)
+//                                .cornerRadius(10)
+//                            }
+//                            .disabled(client.isRunning)
                             
                             Spacer()
                             Text("Model \(client.modelName)")
@@ -147,19 +157,29 @@ struct ContentView: View {
                 // Results card (taller)
                 Card {
                     VStack(alignment: .leading, spacing: 8) {
+//                        HStack {
+//                            Text("Response").font(.headline)
+//                            Spacer()
+//                            Button {
+//                                saveCurrentResult()
+//                            } label: {
+//                                HStack(spacing: 6) {
+//                                    Image(systemName: "square.and.arrow.down")
+//                                    Text("Save")
+//                                }
+//                            }
+//                            .disabled(client.response.isEmpty || client.isRunning)
+//                        }
                         HStack {
                             Text("Response").font(.headline)
                             Spacer()
-                            Button {
+                            SaveButton(
+                                isEnabled: !(client.response.isEmpty || client.isRunning)
+                            ) {
                                 saveCurrentResult()
-                            } label: {
-                                HStack(spacing: 6) {
-                                    Image(systemName: "square.and.arrow.down")
-                                    Text("Save")
-                                }
                             }
-                            .disabled(client.response.isEmpty || client.isRunning)
                         }
+                    
                         
                         
                         ScrollView {
@@ -280,8 +300,13 @@ struct ContentView: View {
             //            .background(
             //                LinearGradient(colors: [.white, .accentCyan.opacity(0.15)], startPoint: .top, endPoint: .bottom)
             //            )
-        }.onAppear { savedDocs = DB.shared.fetchAll() }
-        
+        }
+        .onAppear { savedDocs = DB.shared.fetchAll() }
+        .onReceive(NotificationCenter.default.publisher(for: .runWithOllamaShortcut)) { _ in
+            if !client.isRunning {
+                run()
+            }
+        }
         
     }
     
@@ -347,17 +372,19 @@ struct ContentView: View {
         }
     }
     
-    
     private func quickLook(url: URL) {
         guard let panel = QLPreviewPanel.shared() else { return }
-        panel.dataSource = SinglePreviewDataSource(url: url)
+
+        // Create/replace and keep it alive
+        let ds = SinglePreviewDataSource(url: url)
+        quickLookDataSource = ds
+        panel.dataSource = ds
         if panel.isVisible {
             panel.reloadData()
         } else {
             panel.makeKeyAndOrderFront(nil)
         }
     }
-    
 }
 
 
