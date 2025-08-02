@@ -5,46 +5,11 @@
 //  Created by Patrick Moran on 8/1/25.
 //
 
-// ContentView.swift
 import SwiftUI
 import MarkdownUI
 import PDFKit
 import AppKit
 import QuickLookUI
-
-/*
- 1) Keep promptPreview generation internally (so the button can run), but don’t render it. If you prefer, compute on-demand in run().
- 
- 2) Update the top Card to include the button.
- 
- 3) Remove the middle Card.
- 
- 4) Increase the minHeight of the results Card.
- */
-
-/*
- Layout reminder
- Your outer HStack should contain:
- Left sidebar (existing)
- Main pane (existing, with Save button added)
- Right sidebar (new block above)
- 
- 
- Notes
- PDFs are stored in ~/Documents/Orbit; DB is in Application Support/Orbit/orbit.sqlite3.
- You can later add delete/rename by adding a context menu on each saved item and removing the file + row, then refreshing savedDocs.
- If you want fully styled PDFs that match the on-screen Markdown, switch to rendering HTML via WKWebView and print that to PDF; I kept this edition simple and reliable.
- */
-
-
-/*
- Optional: compute the prompt on-demand
- - Remove promptPreview state and updatePreview().
- 
- 
- With these changes, users only see the inputs and a prominent Run button at the top, and the results area is doubled in height.
- */
-
 
 final class SinglePreviewDataSource: NSObject, QLPreviewPanelDataSource {
     private let url: URL
@@ -55,14 +20,19 @@ final class SinglePreviewDataSource: NSObject, QLPreviewPanelDataSource {
     }
 }
 
-
 struct ContentView: View {
+    
     
     @State private var selected: ADHDTask = .dopamineMenu
     @State private var fieldValues: [String: String] = [:]
     @State private var savedDocs: [SavedDoc] = []
     @State private var quickLookDataSource: SinglePreviewDataSource?
-
+    
+    // delete confirmation
+    @State private var showDeleteConfirm = false
+    @State private var pendingDeleteURL: URL?
+    @State private var pendingDeleteDBID: Int64?
+    
     @StateObject private var client = OllamaClient()
     @FocusState private var focusedFieldKey: String?
     
@@ -115,15 +85,11 @@ struct ContentView: View {
                                     get: { fieldValues[field.key, default: ""] },
                                     set: { newValue in
                                         fieldValues[field.key] = newValue
-                                        // optional: debounce internal prompt update
-                                        // debouncer.schedule(after: 0.2) { updatePreview() }
                                     }
                                 ),
                                 multiline: field.isMultiline,
                                 placeholder: field.placeholder
                             )
-                            
-
                         }
                         
                         HStack {
@@ -131,19 +97,6 @@ struct ContentView: View {
                                 if !client.isRunning { run() }
                             }
                             .disabled(client.isRunning)
-//                            Button {
-//                                run()
-//                            } label: {
-//                                HStack {
-//                                    if client.isRunning { ProgressView().scaleEffect(0.7) }
-//                                    Text(client.isRunning ? "Running..." : "Run with Ollama")
-//                                }
-//                                .padding(.vertical, 8).padding(.horizontal, 12)
-//                                .background(Color.accentCyan)
-//                                .foregroundColor(.black)
-//                                .cornerRadius(10)
-//                            }
-//                            .disabled(client.isRunning)
                             
                             Spacer()
                             Text("Model \(client.modelName)")
@@ -157,19 +110,6 @@ struct ContentView: View {
                 // Results card (taller)
                 Card {
                     VStack(alignment: .leading, spacing: 8) {
-//                        HStack {
-//                            Text("Response").font(.headline)
-//                            Spacer()
-//                            Button {
-//                                saveCurrentResult()
-//                            } label: {
-//                                HStack(spacing: 6) {
-//                                    Image(systemName: "square.and.arrow.down")
-//                                    Text("Save")
-//                                }
-//                            }
-//                            .disabled(client.response.isEmpty || client.isRunning)
-//                        }
                         HStack {
                             Text("Response").font(.headline)
                             Spacer()
@@ -179,8 +119,6 @@ struct ContentView: View {
                                 saveCurrentResult()
                             }
                         }
-                    
-                        
                         
                         ScrollView {
                             Markdown(client.response.isEmpty ? "Results will appear here." : client.response)
@@ -195,27 +133,6 @@ struct ContentView: View {
                     }
                     .frame(minHeight: 440)
                 }
-                
-                
-                //                Card {
-                //                    VStack(alignment: .leading, spacing: 8) {
-                //                        Text("Response")
-                //                            .font(.headline)
-                //                        ScrollView {
-                //                            Markdown(client.response.isEmpty ? "Results will appear here." : client.response)
-                //                                .markdownTheme(.gitHub) // nice default theme
-                //                                .markdownTextStyle {
-                //                                    FontSize(14)
-                //                                }
-                //                                .frame(maxWidth: .infinity, alignment: .topLeading)
-                //                                .padding(.trailing, 2) // avoids clipped right edge when scrolling
-                //                        }
-                //                        if let err = client.errorMessage {
-                //                            Text(err).foregroundColor(.red).font(.footnote)
-                //                        }
-                //                    }
-                //                    .frame(minHeight: 440) // roughly twice the earlier 220
-                //                }
                 
                 Spacer()
             }
@@ -268,25 +185,21 @@ struct ContentView: View {
                             }
                             .buttonStyle(.plain)
                             .contextMenu {
-                                Button("Open") {
-                                    NSWorkspace.shared.open(fileURL)
-                                }
+                                Button("Open") { NSWorkspace.shared.open(fileURL) }
                                 Button("Reveal in Finder") {
                                     NSWorkspace.shared.activateFileViewerSelecting([fileURL])
                                 }
-                                Button("Share…") {
-                                    // AirDrop will appear here automatically
-                                    shareFile(fileURL)
-                                }
+                                Button("Share…") { shareFile(fileURL) }
                                 Button("Quick Look") { quickLook(url: fileURL) }
                                 Divider()
                                 Button(role: .destructive) {
-                                    deletePDF(at: fileURL, dbID: doc.id)
+                                    pendingDeleteURL = fileURL
+                                    pendingDeleteDBID = doc.id
+                                    showDeleteConfirm = true
                                 } label: {
                                     Label("Delete", systemImage: "trash")
                                 }
                             }
-                            
                         }
                     }
                 }
@@ -296,18 +209,48 @@ struct ContentView: View {
             .frame(width: 260)
             .background(Color.white)
             .overlay(Divider().frame(maxHeight: .infinity), alignment: .leading)
-            //            .padding(20)
-            //            .background(
-            //                LinearGradient(colors: [.white, .accentCyan.opacity(0.15)], startPoint: .top, endPoint: .bottom)
-            //            )
+        }
+        .confirmationDialog(
+            "Delete this file?",
+            isPresented: $showDeleteConfirm,
+            titleVisibility: .visible
+        ) {
+            Button("Delete", role: .destructive) {
+                if let url = pendingDeleteURL, let id = pendingDeleteDBID {
+                    deleteToTrash(at: url, dbID: id)
+                }
+                clearPendingDelete()
+            }
+            Button("Cancel", role: .cancel) {
+                clearPendingDelete()
+            }
+        } message: {
+            if let url = pendingDeleteURL {
+                Text("“\(url.lastPathComponent)” will be moved to the Trash.")
+            } else {
+                Text("This will move the file to the Trash.")
+            }
         }
         .onAppear { savedDocs = DB.shared.fetchAll() }
         .onReceive(NotificationCenter.default.publisher(for: .runWithOllamaShortcut)) { _ in
-            if !client.isRunning {
-                run()
-            }
+            if !client.isRunning { run() }
         }
-        
+    }
+    
+    private func clearPendingDelete() {
+        pendingDeleteURL = nil
+        pendingDeleteDBID = nil
+    }
+    
+    private func deleteToTrash(at url: URL, dbID: Int64) {
+        do {
+            try FileManager.default.trashItem(at: url, resultingItemURL: nil)
+            DB.shared.delete(id: dbID)
+            savedDocs = DB.shared.fetchAll()
+        } catch {
+            let alert = NSAlert(error: error)
+            alert.runModal()
+        }
     }
     
     private func run() {
@@ -315,17 +258,14 @@ struct ContentView: View {
         print(prompt)
         client.run(prompt: prompt)
     }
-        
+    
     private func saveCurrentResult() {
         guard !client.response.isEmpty else { return }
         
-        
-        // Build inputs list for the PDF
         let inputs: [(String, String)] = selected.fields.map { field in
             (field.label, fieldValues[field.key, default: ""])
         }
         
-        // Title and filename: emoji + task + first non-empty inputs
         let nonEmpty = inputs.map { $0.1 }.filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
         let suffix = nonEmpty.prefix(2).joined(separator: " · ")
         let docTitle = selected.displayTitle
@@ -339,14 +279,6 @@ struct ContentView: View {
                 markdown: client.response,
                 suggestedName: fileBase
             )
-            
-            //            let url = try PDFGenerator.savePDF(
-            //                emoji: selected.emoji,
-            //                title: docTitle,
-            //                inputs: inputs,
-            //                markdown: client.response,
-            //                suggestedName: fileBase
-            //            )
             _ = DB.shared.insert(taskID: selected.idString,
                                  emoji: selected.emoji,
                                  title: suffix.isEmpty ? docTitle : "\(docTitle) — \(suffix)",
@@ -357,14 +289,10 @@ struct ContentView: View {
         }
     }
     
-    
     private func deletePDF(at url: URL, dbID: Int64) {
         do {
             try FileManager.default.removeItem(at: url)
-            // Remove DB row
             DB.shared.delete(id: dbID)
-            
-            // Reload list
             savedDocs = DB.shared.fetchAll()
         } catch {
             let alert = NSAlert(error: error)
@@ -374,8 +302,6 @@ struct ContentView: View {
     
     private func quickLook(url: URL) {
         guard let panel = QLPreviewPanel.shared() else { return }
-
-        // Create/replace and keep it alive
         let ds = SinglePreviewDataSource(url: url)
         quickLookDataSource = ds
         panel.dataSource = ds
@@ -387,9 +313,7 @@ struct ContentView: View {
     }
 }
 
-
 extension View {
-    // Presents the macOS share picker (includes AirDrop)
     func shareFile(_ url: URL) {
         let picker = NSSharingServicePicker(items: [url])
         if let window = NSApp.keyWindow, let view = window.contentView {
@@ -408,10 +332,6 @@ class Debouncer {
     }
 }
 
-
 #Preview {
     ContentView()
 }
-
-
-

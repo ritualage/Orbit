@@ -120,7 +120,7 @@ extension ADHDTask {
     
     var displayTitle: String {
         // remove the leading emoji and space
-        var parts = rawValue.split(separator: " ")
+        let parts = rawValue.split(separator: " ")
         _ = parts.first // emoji
         return parts.dropFirst().joined(separator: " ")
     }

@@ -68,3 +68,6 @@ Icon
 # Logs and databases
 *.log
 *.sqlite
+
+# Crush agent cache
+.crush/

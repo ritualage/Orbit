@@ -16,11 +16,13 @@ enum PDFGenerator {
                                       inputs: [(String, String)],
                                       markdown: String,
                                       suggestedName: String) throws -> URL {
+        
         let dir = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first!
         let folder = dir.appendingPathComponent("Orbit", isDirectory: true)
         try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
-        let safe = suggestedName.replacingOccurrences(of: "[^a-zA-Z0-9_-]+", with: "_", options: .regularExpression)
-        let url = folder.appendingPathComponent("\(safe).pdf")
+        
+        let base = PDFGenerator.safeFilename(from: suggestedName)
+        let url = PDFGenerator.uniqueFileURL(in: folder, baseName: base, ext: "pdf")
         
         
         // Page width remains e.g. 612 pts; height will be the content’s ideal height
@@ -45,6 +47,67 @@ enum PDFGenerator {
         
         try tallData.write(to: url, options: [.atomic])
         return url
+    }
+    
+    static func safeFilename(from title: String, maxLength: Int = 100) -> String {
+        // Normalize
+        let s = title.precomposedStringWithCanonicalMapping()
+        
+        
+        // Build allowing alphanumerics and spaces (spaces will become underscores)
+        let allowed = CharacterSet.alphanumerics.union(.whitespaces)
+        var out = ""
+        var lastWasUnderscore = false
+        
+        for scalar in s.unicodeScalars {
+            if allowed.contains(scalar) {
+                if scalar == " " {
+                    // Convert spaces to single underscores
+                    if !lastWasUnderscore {
+                        out.append("_")
+                        lastWasUnderscore = true
+                    }
+                } else {
+                    out.unicodeScalars.append(scalar)
+                    lastWasUnderscore = false
+                }
+            } else {
+                // Any other disallowed char becomes an underscore (collapsed)
+                if !lastWasUnderscore {
+                    out.append("_")
+                    lastWasUnderscore = true
+                }
+            }
+        }
+        
+        // Trim leading/trailing underscores
+        out = out.trimmingCharacters(in: CharacterSet(charactersIn: "_"))
+        
+        // Fallback
+        if out.isEmpty { out = "untitled" }
+        
+        // Enforce max length
+        if out.count > maxLength {
+            let endIdx = out.index(out.startIndex, offsetBy: maxLength)
+            out = String(out[..<endIdx]).trimmingCharacters(in: CharacterSet(charactersIn: "_"))
+        }
+        return out
+    }
+    
+    static func uniqueFileURL(in folder: URL, baseName: String, ext: String = "pdf") -> URL {
+        var candidate = folder.appendingPathComponent(baseName).appendingPathExtension(ext)
+        if !FileManager.default.fileExists(atPath: candidate.path) {
+            return candidate
+        }
+        var i = 2
+        while true {
+            let name = "\(baseName)(\(i))"
+            candidate = folder.appendingPathComponent(name).appendingPathExtension(ext)
+            if !FileManager.default.fileExists(atPath: candidate.path) {
+                return candidate
+            }
+            i += 1
+        }
     }
     
     // Top-down pagination so page 1 starts with the beginning of your content
