@@ -1,0 +1,70 @@
+# Xcode
+DerivedData/
+build/
+*.xcworkspace
+xcuserdata/
+*.xccheckout
+*.xcscmblueprint
+
+# Swift Package Manager
+/.build/
+/Packages/
+
+# CocoaPods (if used)
+/Pods/
+
+# Carthage (if used)
+/Carthage/Build/
+
+# fastlane (if used)
+/fastlane/report.xml
+/fastlane/Preview.html
+/fastlane/screenshots
+/fastlane/test_output/
+
+# Xcode archives
+*.xcarchive
+
+# Playgrounds
+timeline.xctimeline
+playground.xcworkspace
+
+# Swift Playgrounds
+*.playground
+
+# Temporary files
+*.moved-aside
+*.ipa
+*.dSYM.zip
+*.dSYM
+
+# macOS file system
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Icon must end with two 
+Icon
+
+# Thumbnails
+._*
+
+# Files that might appear in the root of a volume
+.DocumentRevisions-V100
+.fseventsd
+.Spotlight-V100
+.TemporaryItems
+.Trashes
+.VolumeIcon.icns
+
+# User-specific files
+*.swp
+*~.nib
+
+# IDE settings
+.idea/
+.vscode/
+
+# Logs and databases
+*.log
+*.sqlite
