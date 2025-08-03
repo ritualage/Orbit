@@ -6,7 +6,6 @@
 //
 
 
-// TaskDefinitions.swift
 import Foundation
 
 enum ADHDTask: String, CaseIterable, Identifiable {
@@ -28,6 +27,7 @@ enum ADHDTask: String, CaseIterable, Identifiable {
         let placeholder: String
         let isMultiline: Bool
     }
+    
     var fields: [Field] {
         switch self {
         case .dopamineMenu:
