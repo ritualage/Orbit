@@ -14,25 +14,31 @@ enum ADHDTask: String, CaseIterable, Identifiable {
     case hyperfocusHijacker = "🧲 Hyperfocus hijacker"
     case timeBlindness = "⏰ Time blindness fixer"
     case executiveDysfunction = "⚙️ Executive dysfunction "
-    case memoryProsthetic = "🗂️ Memory prosthetic system"
-    case rsdShield = "🛡️ RSD shield builder"
-
+    case rsdShield = "🛡️ RSD shield builder" // rejection sensitivity dysphoria
+    
     var id: String { rawValue }
-
+    
     // Fields needed per task (ALL CAPS from images)
     struct Field: Identifiable {
         var id: String { key }
-        let key: String       // identifier
-        let label: String     // UI label
+        let key: String
+        let label: String
         let placeholder: String
         let isMultiline: Bool
+        var preferredHeight: CGFloat? = nil // new
     }
     
     var fields: [Field] {
         switch self {
         case .dopamineMenu:
             return [
-                .init(key: "tasks", label: "Tasks", placeholder: "List tasks you have today...", isMultiline: true)
+                .init(
+                    key: "tasks",
+                    label: "Tasks",
+                    placeholder: "List tasks you have today...",
+                    isMultiline: true,
+                    preferredHeight: 150 // about half of what you have now
+                )
             ]
         case .taskParalysis:
             return [
@@ -46,24 +52,43 @@ enum ADHDTask: String, CaseIterable, Identifiable {
             ]
         case .timeBlindness:
             return [
-                .init(key: "taskList", label: "Task list", placeholder: "List tasks you think take 'a few hours'...", isMultiline: true)
+                .init(
+                    key: "taskList",
+                    label: "Task list",
+                    placeholder: "List tasks you think take 'a few hours'...",
+                    isMultiline: true,
+                    preferredHeight: 150
+                )
             ]
         case .executiveDysfunction:
             return [
-                .init(key: "task", label: "Task", placeholder: "Task you know you should do but can't start", isMultiline: true)
-            ]
-        case .memoryProsthetic:
-            return [
-                .init(key: "importantThings", label: "Important things you keep forgetting", placeholder: "Birthdays, bills, medications, etc.", isMultiline: true)
+                .init(
+                    key: "task",
+                    label: "Task",
+                    placeholder: "Task you know you should do but can't start",
+                    isMultiline: true,
+                    preferredHeight: 150
+                )
             ]
         case .rsdShield:
             return [
-                .init(key: "task", label: "Task you're avoiding", placeholder: "e.g., email boss, publish post", isMultiline: false),
-                .init(key: "fears", label: "Fears (rejection, criticism)", placeholder: "What reactions are you scared of?", isMultiline: true)
+                .init(
+                    key: "task",
+                    label: "Task you're avoiding",
+                    placeholder: "e.g., email boss, publish post",
+                    isMultiline: false
+                ),
+                .init(
+                    key: "fears",
+                    label: "Fears (rejection, criticism)",
+                    placeholder: "What reactions are you scared of?",
+                    isMultiline: true,
+                    preferredHeight: 150
+                )
             ]
         }
     }
-
+    
     // Prompt template
     func prompt(with values: [String: String]) -> String {
         switch self {
@@ -94,11 +119,6 @@ enum ADHDTask: String, CaseIterable, Identifiable {
             return """
             I know I should \(task) but physically can't start. Create a "background process" method to trick my brain into starting without deciding to. Include micro-steps, environmental tweaks, and a 10-minute warm start.
             """
-        case .memoryProsthetic:
-            let things = values["importantThings", default: ""]
-            return """
-            I keep forgetting \(things). Design an external memory system that doesn't rely on me remembering to check it. Use push-based cues, placement, automation, and redundancy. Include setup checklist and defaults for iPhone/Mac.
-            """
         case .rsdShield:
             let task = values["task", default: ""]
             let fears = values["fears", default: ""]
@@ -114,15 +134,47 @@ extension ADHDTask {
     
     
     var emoji: String {
-        // rawValue starts with "🍭 Dopamine..." — take the first grapheme
         String(rawValue.split(separator: " ").first ?? "")
     }
     
     var displayTitle: String {
-        // remove the leading emoji and space
         let parts = rawValue.split(separator: " ")
-        _ = parts.first // emoji
         return parts.dropFirst().joined(separator: " ")
+    }
+    
+    var description: String {
+        switch self {
+        case .dopamineMenu:
+            return "Wrap low-dopamine tasks with small rewards and breaks so they actually get done."
+        case .taskParalysis:
+            return "Turn a scary task into tiny, obvious steps with a 2‑minute starter and momentum boosters."
+        case .hyperfocusHijacker:
+            return "Redirect current hyperfocus into the important thing using bridge activities."
+        case .timeBlindness:
+            return "Estimate realistic durations with buffers/alarms and build a visual schedule."
+        case .executiveDysfunction:
+            return "Sneak past the 'start wall' with micro-steps, environment tweaks, and a warm start."
+        case .rsdShield:
+            return "Reduce rejection sensitivity while acting with a self-talk script and protective protocol."
+        }
+    }
+    
+    // Short note explaining what the right panel does for this task
+    var panelHelp: String {
+        switch self {
+        case .dopamineMenu:
+            return "Enter today’s tasks. The panel will generate a time‑blocked plan where boring items are sandwiched between rewards."
+        case .taskParalysis:
+            return "Enter the task and how long you’ve been staring at it. The panel will break it into tiny first steps and momentum hacks."
+        case .hyperfocusHijacker:
+            return "Enter what you’re hyperfocused on and what actually matters. The panel creates 3 bridge options and a 30–60 min plan."
+        case .timeBlindness:
+            return "Paste your task list. The panel adds realistic time + buffers and a schedule with alarms."
+        case .executiveDysfunction:
+            return "Enter the stuck task. The panel builds a background-process start method with micro-steps and a 10‑minute warm start."
+        case .rsdShield:
+            return "Enter the avoided task and fears. The panel outputs a self‑talk script, during‑task prompts, and aftercare."
+        }
     }
 }
 

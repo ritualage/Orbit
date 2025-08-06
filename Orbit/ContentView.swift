@@ -49,17 +49,29 @@ struct ContentView: View {
                                 selected = task
                                 fieldValues = [:]
                             } label: {
-                                HStack {
-                                    Text(task.rawValue)
-                                        .font(.system(size: 14, weight: task == selected ? .semibold : .regular))
-                                        .foregroundColor(.primary)
-                                    Spacer()
+                                VStack(alignment: .leading, spacing: 6) {
+                                    HStack(spacing: 8) {
+                                        Text(task.emoji)
+                                        Text(task.displayTitle)
+                                            .font(.system(size: 14, weight: task == selected ? .semibold : .regular))
+                                            .foregroundColor(.primary)
+                                        Spacer()
+                                    }
+                                    Text(task.description)
+                                        .font(.system(size: 12))
+                                        .foregroundColor(.secondary)
+                                        .fixedSize(horizontal: false, vertical: true) // allow wrap, no clipping
+                                        .lineLimit(3) // or remove to allow full wrap
                                 }
-                                .padding(10)
+                                .padding(.vertical, 10) // more vertical space inside each row
+                                .padding(.horizontal, 10)
                                 .background(task == selected ? Color.accentCyan.opacity(0.25) : Color.white)
                                 .cornerRadius(10)
                             }
                             .buttonStyle(.plain)
+                            
+                            // Extra space between items
+                            .padding(.bottom, 6)
                         }
                     }
                 }
@@ -72,12 +84,22 @@ struct ContentView: View {
             
             // Main pane
             VStack(alignment: .leading, spacing: 16) {
-                Text(selected.rawValue)
-                    .font(.system(size: 20, weight: .bold))
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(selected.rawValue)
+                        .font(.system(size: 20, weight: .bold))
+                }
                 
                 // Top card: inputs + Run button
                 Card {
                     VStack(alignment: .leading, spacing: 12) {
+                        HStack(spacing: 8) {
+                            Image(systemName: "questionmark.circle")
+                                .foregroundColor(.secondary)
+                            Text(selected.panelHelp)
+                                .font(.footnote)
+                                .foregroundColor(.secondary)
+                        }
+                        .padding(.bottom, 4)
                         ForEach(selected.fields) { field in
                             RoundedTextField(
                                 title: field.label,
@@ -310,6 +332,28 @@ struct ContentView: View {
         } else {
             panel.makeKeyAndOrderFront(nil)
         }
+    }
+    
+    private func keywordFileBase(for task: ADHDTask, fields: [ADHDTask.Field], values: [String: String]) -> String {
+        // Collect non-empty user inputs in field order
+        let nonEmptyValues = fields
+            .map { values[$0.key, default: ""].trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+        
+        
+        // Build a short keyword slug from first 2 inputs
+        let keywordPart = nonEmptyValues
+            .prefix(2)
+            .joined(separator: " · ")
+        
+        // Fallback: if no inputs, use date to avoid collisions
+        if keywordPart.isEmpty {
+            let df = DateFormatter()
+            df.dateFormat = "yyyy-MM-dd_HH-mm"
+            return "\(task.emoji)_\(df.string(from: Date()))"
+        }
+        
+        return "\(task.emoji)_\(keywordPart)"
     }
 }
 
