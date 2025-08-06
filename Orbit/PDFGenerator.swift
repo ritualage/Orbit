@@ -51,7 +51,7 @@ enum PDFGenerator {
     
     static func safeFilename(from title: String, maxLength: Int = 100) -> String {
         // Normalize
-        let s = title.precomposedStringWithCanonicalMapping()
+        let s = title.precomposedStringWithCanonicalMapping
         
         
         // Build allowing alphanumerics and spaces (spaces will become underscores)
