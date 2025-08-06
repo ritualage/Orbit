@@ -78,7 +78,7 @@ struct ContentView: View {
                 Spacer()
             }
             .padding(16)
-            .frame(width: 260)
+            .frame(width: 280)
             .background(Color.white)
             .overlay(Divider().frame(maxHeight: .infinity), alignment: .trailing)
             
@@ -101,17 +101,28 @@ struct ContentView: View {
                         }
                         .padding(.bottom, 4)
                         ForEach(selected.fields) { field in
-                            RoundedTextField(
-                                title: field.label,
-                                text: Binding(
-                                    get: { fieldValues[field.key, default: ""] },
-                                    set: { newValue in
-                                        fieldValues[field.key] = newValue
-                                    }
-                                ),
-                                multiline: field.isMultiline,
-                                placeholder: field.placeholder
+                            let binding = Binding(
+                                get: { fieldValues[field.key, default: ""] },
+                                set: { fieldValues[field.key] = $0 }
                             )
+                            
+                            
+                            if field.isMultiline, let h = field.preferredHeight {
+                                RoundedTextField(
+                                    title: field.label,
+                                    text: binding,
+                                    multiline: true,
+                                    placeholder: field.placeholder
+                                )
+                                .frame(minHeight: h, maxHeight: h)   // apply the shorter height
+                            } else {
+                                RoundedTextField(
+                                    title: field.label,
+                                    text: binding,
+                                    multiline: field.isMultiline,
+                                    placeholder: field.placeholder
+                                )
+                            }
                         }
                         
                         HStack {
@@ -190,16 +201,19 @@ struct ContentView: View {
                                     }
                                     VStack(alignment: .leading, spacing: 2) {
                                         Text(doc.title)
-                                            .lineLimit(2)
                                             .font(.system(size: 12))
                                             .foregroundColor(.primary)
+                                            .fixedSize(horizontal: false, vertical: true) // wrap fully
+                                            .lineLimit(nil) // no truncation
                                         Text(doc.date, style: .date)
                                             .font(.system(size: 10))
                                             .foregroundColor(.secondary)
                                     }
+                                    .layoutPriority(1)
                                     Spacer()
                                     Image(systemName: "doc.text")
                                         .foregroundColor(.secondary)
+                                        .layoutPriority(0) // lowest priority
                                 }
                                 .padding(6)
                                 .background(Color.white.opacity(0.6))
@@ -228,7 +242,7 @@ struct ContentView: View {
                 Spacer()
             }
             .padding(12)
-            .frame(width: 260)
+            .frame(width: 280)
             .background(Color.white)
             .overlay(Divider().frame(maxHeight: .infinity), alignment: .leading)
         }
@@ -284,14 +298,19 @@ struct ContentView: View {
     private func saveCurrentResult() {
         guard !client.response.isEmpty else { return }
         
+        
         let inputs: [(String, String)] = selected.fields.map { field in
             (field.label, fieldValues[field.key, default: ""])
         }
         
-        let nonEmpty = inputs.map { $0.1 }.filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+        let nonEmpty = inputs
+            .map { $0.1 }
+            .filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
         let suffix = nonEmpty.prefix(2).joined(separator: " · ")
         let docTitle = selected.displayTitle
-        let fileBase = "\(selected.emoji)_\(docTitle)\(suffix.isEmpty ? "" : "_\(suffix)")"
+        
+        // Filename: Category first (no emoji), optional suffix
+        let fileBase = "\(docTitle)\(suffix.isEmpty ? "" : " — \(suffix)")"
         
         do {
             let url = try PDFGenerator.savePDFFromMarkdownUI(
@@ -301,10 +320,12 @@ struct ContentView: View {
                 markdown: client.response,
                 suggestedName: fileBase
             )
-            _ = DB.shared.insert(taskID: selected.idString,
-                                 emoji: selected.emoji,
-                                 title: suffix.isEmpty ? docTitle : "\(docTitle) — \(suffix)",
-                                 pdfPath: url.path)
+            _ = DB.shared.insert(
+                taskID: selected.idString,
+                emoji: selected.emoji,
+                title: suffix.isEmpty ? docTitle : "\(docTitle) — \(suffix)",
+                pdfPath: url.path
+            )
             savedDocs = DB.shared.fetchAll()
         } catch {
             print("PDF save failed: \(error)")
